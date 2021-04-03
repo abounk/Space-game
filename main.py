@@ -3,11 +3,57 @@ from random import randint, random
 
 import tkinter as tk
 
+from abc import ABC, abstractmethod
+
 from gamelib import Sprite, GameApp, Text
 
 from consts import *
 from elements import Ship, Bullet, Enemy
 from utils import random_edge_position, normalize_vector, direction_to_dxdy, vector_len, distance
+
+
+class EnemyGenerationStrategy(ABC):
+    @abstractmethod
+    def generate(self, space_game, ship):
+        pass
+
+
+class StarEnemyGenerationStrategy(EnemyGenerationStrategy):
+    def generate(self, space_game, ship):
+        ####
+        # TODO: extracted from method create_enemy_star
+        self.app = space_game
+        enemies = []
+
+        x = randint(100, CANVAS_WIDTH - 100)
+        y = randint(100, CANVAS_HEIGHT - 100)
+
+        while vector_len(x - self.app.ship.x, y - self.app.ship.y) < 200:
+            x = randint(100, CANVAS_WIDTH - 100)
+            y = randint(100, CANVAS_HEIGHT - 100)
+
+        for d in range(18):
+            dx, dy = direction_to_dxdy(d * 20)
+            enemy = Enemy(self.app, x, y, dx * ENEMY_BASE_SPEED,
+                          dy * ENEMY_BASE_SPEED)
+            enemies.append(enemy)
+
+        return enemies
+
+
+class EdgeEnemyGenerationStrategy(EnemyGenerationStrategy):
+    def generate(self, space_game, ship):
+        ####
+        # TODO: extracted from method create_enemy_from_edge
+        self.app = space_game
+        x, y = random_edge_position()
+        vx, vy = normalize_vector(self.app.ship.x - x, self.app.ship.y - y)
+
+        vx *= ENEMY_BASE_SPEED
+        vy *= ENEMY_BASE_SPEED
+
+        enemy = Enemy(self.app, x, y, vx, vy)
+        return [enemy]
 
 
 class SpaceGame(GameApp):
@@ -30,6 +76,11 @@ class SpaceGame(GameApp):
 
         self.elements.append(self.ship)
 
+        self.enemy_creation_strategies = [
+            (0.2, StarEnemyGenerationStrategy()),
+            (1.0, EdgeEnemyGenerationStrategy())
+        ]
+
         self.enemies = []
         self.bullets = []
 
@@ -47,9 +98,9 @@ class SpaceGame(GameApp):
             self.bomb_power = 0
 
             self.bomb_canvas_id = self.canvas.create_oval(
-                self.ship.x - BOMB_RADIUS, 
+                self.ship.x - BOMB_RADIUS,
                 self.ship.y - BOMB_RADIUS,
-                self.ship.x + BOMB_RADIUS, 
+                self.ship.x + BOMB_RADIUS,
                 self.ship.y + BOMB_RADIUS
             )
 
@@ -84,41 +135,52 @@ class SpaceGame(GameApp):
             self.bomb_wait = 0
             self.update_bomb_power_text()
 
-    def create_enemy_star(self):
-        enemies = []
+    # def create_enemy_star(self):
+    #     enemies = []
 
-        x = randint(100, CANVAS_WIDTH - 100)
-        y = randint(100, CANVAS_HEIGHT - 100)
+    #     x = randint(100, CANVAS_WIDTH - 100)
+    #     y = randint(100, CANVAS_HEIGHT - 100)
 
-        while vector_len(x - self.ship.x, y - self.ship.y) < 200:
-            x = randint(100, CANVAS_WIDTH - 100)
-            y = randint(100, CANVAS_HEIGHT - 100)
+    #     while vector_len(x - self.ship.x, y - self.ship.y) < 200:
+    #         x = randint(100, CANVAS_WIDTH - 100)
+    #         y = randint(100, CANVAS_HEIGHT - 100)
 
-        for d in range(18):
-            dx, dy = direction_to_dxdy(d * 20)
-            enemy = Enemy(self, x, y, dx * ENEMY_BASE_SPEED, dy * ENEMY_BASE_SPEED)
-            enemies.append(enemy)
+    #     for d in range(18):
+    #         dx, dy = direction_to_dxdy(d * 20)
+    #         enemy = Enemy(self, x, y, dx * ENEMY_BASE_SPEED,
+    #                       dy * ENEMY_BASE_SPEED)
+    #         enemies.append(enemy)
 
-        return enemies
+    #     return enemies
 
-    def create_enemy_from_edges(self):
-        x, y = random_edge_position()
-        vx, vy = normalize_vector(self.ship.x - x, self.ship.y - y)
+    # def create_enemy_from_edges(self):
+    #     x, y = random_edge_position()
+    #     vx, vy = normalize_vector(self.ship.x - x, self.ship.y - y)
 
-        vx *= ENEMY_BASE_SPEED
-        vy *= ENEMY_BASE_SPEED
+    #     vx *= ENEMY_BASE_SPEED
+    #     vy *= ENEMY_BASE_SPEED
 
-        enemy = Enemy(self, x, y, vx, vy)
-        return [enemy]
+    #     enemy = Enemy(self, x, y, vx, vy)
+    #     return [enemy]
 
     def create_enemies(self):
-        if random() < 0.2:
-            enemies = self.create_enemy_star()
-        else:
-            enemies = self.create_enemy_from_edges()
+        p = random()
+
+        for prob, strategy in self.enemy_creation_strategies:
+            if p < prob:
+                enemies = strategy.generate(self, self.ship)
+                break
 
         for e in enemies:
             self.add_enemy(e)
+
+        # if random() < 0.2:
+        #     enemies = self.create_enemy_star()
+        # else:
+        #     enemies = self.create_enemy_from_edges()
+
+        # for e in enemies:
+        #     self.add_enemy(e)
 
     def pre_update(self):
         if random() < 0.1:
@@ -138,7 +200,7 @@ class SpaceGame(GameApp):
 
     def process_collisions(self):
         self.process_bullet_enemy_collisions()
-        self.process_ship_enemy_collision()
+        # self.process_ship_enemy_collision()
 
     def update_and_filter_deleted(self, elements):
         new_list = []
@@ -180,7 +242,7 @@ class SpaceGame(GameApp):
 if __name__ == "__main__":
     root = tk.Tk()
     root.title("Space Fighter")
- 
+
     # do not allow window resizing
     root.resizable(False, False)
     app = SpaceGame(root, CANVAS_WIDTH, CANVAS_HEIGHT, UPDATE_DELAY)
